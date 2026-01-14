@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { sendToN8n, N8nPayload } from "../services/n8nService.js";
 import { fetchGamesFromApi } from "../services/gamesApiService.js";
+import { fetchBetLinesFromApi } from "../services/betLinesService.js";
 import {
   MOCK_USER_PREFERENCES,
   MOCK_DATE_FILTERS,
@@ -333,16 +334,34 @@ export async function getGameSuggestions(
 
     // Fetch games from external 365scores API and extract game IDs
     console.log("Fetching games from 365scores API...");
-    const gameIds = await fetchGamesFromApi(
-      userPreferences,
-      MOCK_DATE_FILTERS
-    );
+    const gameIds = await fetchGamesFromApi(userPreferences, MOCK_DATE_FILTERS);
 
     // Log the extracted game IDs
     console.log("=== Extracted Game IDs ===");
     console.log("Total Game IDs:", gameIds.length);
     console.log("Game IDs:", gameIds);
     console.log("=== End of Game IDs ===");
+
+    // Fetch bet lines for each game using Promise.all
+    // Using uc=21 as shown in the example API call
+    const UC_PARAMETER = 21;
+    console.log("Fetching bet lines for all games...");
+    const betLinesPromises = gameIds.map((gameId) =>
+      fetchBetLinesFromApi(UC_PARAMETER, gameId)
+    );
+
+    // Execute all bet lines requests in parallel
+    const betLinesResults = await Promise.all(betLinesPromises);
+
+    // Log the bet lines results
+    console.log("=== Bet Lines Results ===");
+    console.log("Total Bet Lines Results:", betLinesResults.length);
+    betLinesResults.forEach((betLinesResponse, index) => {
+      console.log(
+        `Game ID ${gameIds[index]} - Bet Lines Count: ${betLinesResponse.Lines.length}, LastUpdateID: ${betLinesResponse.LastUpdateID}`
+      );
+    });
+    console.log("=== End of Bet Lines Results ===");
 
     // TODO: Transform external API response to match GamesBetsSuggestionsResponse
     // For now, return mock data until we adapt to the external API response structure
