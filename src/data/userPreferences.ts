@@ -41,8 +41,7 @@ export const MOCK_DATE_FILTERS: DateFilters = {
  */
 export const MOCK_USER_PREFERENCES: UserPreferences = {
   userId: "12345",
-  sportTypeIds: [1, 2],
   competitionIds: [7, 11, 572],
-  competitorIds: [104, 132, 134, 108],
+  competitorIds: [104, 132, 131],
   lang: 1,
 };

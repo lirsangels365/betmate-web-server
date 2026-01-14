@@ -1,5 +1,11 @@
 import { Request, Response } from "express";
 import { sendToN8n, N8nPayload } from "../services/n8nService.js";
+import { fetchGamesFromApi } from "../services/gamesApiService.js";
+import {
+  MOCK_USER_PREFERENCES,
+  MOCK_DATE_FILTERS,
+  UserPreferences,
+} from "../data/userPreferences.js";
 
 /**
  * TypeScript interfaces for the games-bets-suggestions endpoint
@@ -318,7 +324,28 @@ export async function getGameSuggestions(
       }
     );
 
-    // Prepare response with mock data
+    // TODO: Replace with actual user preferences fetch from external API
+    // For now, using mock user preferences
+    const userPreferences: UserPreferences = {
+      ...MOCK_USER_PREFERENCES,
+      userId, // Use the userId from the path parameter
+    };
+
+    // Fetch games from external 365scores API and extract game IDs
+    console.log("Fetching games from 365scores API...");
+    const gameIds = await fetchGamesFromApi(
+      userPreferences,
+      MOCK_DATE_FILTERS
+    );
+
+    // Log the extracted game IDs
+    console.log("=== Extracted Game IDs ===");
+    console.log("Total Game IDs:", gameIds.length);
+    console.log("Game IDs:", gameIds);
+    console.log("=== End of Game IDs ===");
+
+    // TODO: Transform external API response to match GamesBetsSuggestionsResponse
+    // For now, return mock data until we adapt to the external API response structure
     const response: GamesBetsSuggestionsResponse = {
       suggestions: MOCK_GAMES,
     };
