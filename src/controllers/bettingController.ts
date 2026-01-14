@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
 import { sendToN8n, N8nPayload } from "../services/n8nService.js";
 import { fetchGamesFromApi } from "../services/gamesApiService.js";
-import { fetchBetLinesFromApi } from "../services/betLinesService.js";
+import {
+  fetchBetLinesFromApi,
+  BetLinesExternalApiResponse,
+  BetLine,
+} from "../services/betLinesService.js";
+import { LINE_TYPES_DATA } from "../data/lineTypes.js";
+import { LineType } from "../services/lineTypeService.js";
 import {
   MOCK_USER_PREFERENCES,
   MOCK_DATE_FILTERS,
@@ -55,10 +61,19 @@ interface Game {
 }
 
 /**
+ * Bet lines with game ID
+ */
+interface BetLinesWithGameId {
+  gameId: number;
+  Lines: BetLine[];
+}
+
+/**
  * Response structure for games-bets-suggestions endpoint
  */
 interface GamesBetsSuggestionsResponse {
-  suggestions: Game[];
+  betLines: BetLinesWithGameId[];
+  lineTypes: LineType[];
 }
 
 /**
@@ -363,13 +378,21 @@ export async function getGameSuggestions(
     });
     console.log("=== End of Bet Lines Results ===");
 
-    // TODO: Transform external API response to match GamesBetsSuggestionsResponse
-    // For now, return mock data until we adapt to the external API response structure
+    // Combine each bet lines result with its corresponding gameId
+    const betLinesWithGameIds = betLinesResults.map((result, index) => ({
+      gameId: gameIds[index],
+      Lines: result.Lines,
+    }));
+
+    // Combine bet lines results with line types
     const response: GamesBetsSuggestionsResponse = {
-      suggestions: MOCK_GAMES,
+      betLines: betLinesWithGameIds,
+      lineTypes: LINE_TYPES_DATA.LineTypes,
     };
 
-    // Return 200 OK with suggestions
+    console.log("Response:", response.betLines);
+
+    // Return 200 OK with bet lines and line types
     res.status(200).json(response);
   } catch (error) {
     // Error handling: Return 500 status with clean error message
