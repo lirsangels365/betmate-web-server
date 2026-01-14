@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError } from "axios";
 
 /**
  * Interface for the data structure sent to n8n
@@ -31,15 +31,25 @@ export async function sendToN8n(payload: N8nPayload): Promise<unknown> {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
 
   if (!webhookUrl) {
-    throw new Error('N8N_WEBHOOK_URL is not configured in environment variables');
+    console.error(
+      "Environment check - N8N_WEBHOOK_URL:",
+      process.env.N8N_WEBHOOK_URL
+    );
+    console.error(
+      "All env vars with N8N:",
+      Object.keys(process.env).filter((k) => k.includes("N8N"))
+    );
+    throw new Error(
+      "N8N_WEBHOOK_URL is not configured in environment variables"
+    );
   }
 
   try {
     const response = await axios.post(webhookUrl, payload, {
       headers: {
-        'Content-Type': 'application/json'
+        "Content-Type": "application/json",
       },
-      timeout: 30000 // 30 seconds timeout
+      timeout: 30000, // 30 seconds timeout
     });
 
     return response.data;
@@ -48,12 +58,18 @@ export async function sendToN8n(payload: N8nPayload): Promise<unknown> {
       const axiosError = error as AxiosError;
       if (axiosError.response) {
         throw new Error(
-          `n8n webhook returned error: ${axiosError.response.status} - ${JSON.stringify(axiosError.response.data)}`
+          `n8n webhook returned error: ${
+            axiosError.response.status
+          } - ${JSON.stringify(axiosError.response.data)}`
         );
       } else if (axiosError.request) {
-        throw new Error('n8n webhook request failed - no response received');
+        throw new Error("n8n webhook request failed - no response received");
       }
     }
-    throw new Error(`Failed to communicate with n8n: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to communicate with n8n: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }
