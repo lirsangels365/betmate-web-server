@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger.js";
 import bettingRoutes from "./routes/bettingRoutes.js";
+import { initializeLineTypes } from "./data/lineTypes.js";
 
 // Load environment variables
 // Use process.cwd() to get project root, or fallback to relative path
@@ -82,14 +83,23 @@ function createServer(): Express {
 
 /**
  * Start the Express server
+ * Initializes line types from external API before starting the server
  */
-function startServer(): void {
-  const app = createServer();
-  const PORT = process.env.PORT || 3000;
+async function startServer(): Promise<void> {
+  try {
+    // Initialize line types from external API before starting the server
+    await initializeLineTypes();
 
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+    const app = createServer();
+    const PORT = process.env.PORT || 3000;
+
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
 }
 
 // Start the server
