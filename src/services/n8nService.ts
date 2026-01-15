@@ -2,6 +2,7 @@ import axios, { AxiosError } from "axios";
 import { BetLine } from "./betLinesService.js";
 import { LineType } from "./lineTypeService.js";
 import { N8N_WEBHOOK_URL } from "../config/constants.js";
+import { GameInfo } from "./gamesApiService.js";
 
 /**
  * Interface for the data structure sent to n8n
@@ -35,7 +36,7 @@ export interface BetLinesWithGameId {
 /**
  * Interface for the AI agent payload
  * Note: n8n AI Agent expects 'chatInput' for the prompt field
- * 
+ *
  * IMPORTANT: In n8n, webhook nodes nest POST request bodies under 'body'.
  * So the AI Agent node must use {{ $json.body.chatInput }} (not {{ $json.chatInput }})
  * to access the prompt from this payload.
@@ -45,6 +46,7 @@ export interface AIAgentPayload {
   data: {
     betLines: BetLinesWithGameId[];
     lineTypes: LineType[];
+    gamesInfo: GameInfo[]; // Game information including competitor names
   };
 }
 
@@ -66,7 +68,7 @@ export async function sendToN8n(payload: N8nPayload): Promise<unknown> {
       headers: {
         "Content-Type": "application/json",
       },
-      timeout: 30000, // 30 seconds timeout
+      timeout: 220000, // 30 seconds timeout
     });
 
     return response.data;

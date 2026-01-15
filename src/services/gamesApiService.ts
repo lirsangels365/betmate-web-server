@@ -1,6 +1,34 @@
 import axios, { AxiosError } from "axios";
 import { UserPreferences, DateFilters } from "../data/userPreferences.js";
-import { ExternalGameApiResponse } from "../types/externalApiTypes.js";
+import {
+  ExternalGameApiResponse,
+  ExternalGame,
+  Competitor as ExternalCompetitor,
+  Venue,
+} from "../types/externalApiTypes.js";
+
+/**
+ * Game information with competitor details
+ */
+export interface GameInfo {
+  gameId: number;
+  competitor1?: {
+    id: number;
+    name: string;
+    logo?: string;
+  };
+  competitor2?: {
+    id: number;
+    name: string;
+    logo?: string;
+  };
+  venue?: {
+    id: number;
+    name: string;
+  };
+  date?: string; // Game start time (STime from API)
+  statusText?: string; // Derived from game status
+}
 
 /**
  * Interface for the query parameters sent to the 365scores Games API
@@ -72,16 +100,16 @@ function buildApiParams(
 }
 
 /**
- * Fetches games from the 365scores Games API and extracts game IDs
+ * Fetches games from the 365scores Games API and extracts game information with competitors
  * @param userPreferences - User preferences for filtering games
  * @param dateFilters - Date range filters
- * @returns Promise with an array of game IDs
+ * @returns Promise with an array of game information including competitor details
  * @throws {Error} If the API request fails
  */
 export async function fetchGamesFromApi(
   userPreferences: UserPreferences,
   dateFilters: DateFilters
-): Promise<number[]> {
+): Promise<GameInfo[]> {
   try {
     // Build query parameters
     const params = buildApiParams(userPreferences, dateFilters);
@@ -102,8 +130,8 @@ export async function fetchGamesFromApi(
       }
     );
 
-    // Extract and return game IDs
-    return extractGameIds(response.data);
+    // Extract and return game information with competitors
+    return extractGameInfo(response.data);
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
@@ -126,10 +154,51 @@ export async function fetchGamesFromApi(
 }
 
 /**
- * Extracts game IDs from the external API response
+ * Extracts game information including competitor details from the external API response
  * @param apiResponse - The response object from the 365scores Games API
- * @returns Array of game IDs (numbers)
+ * @returns Array of game information with competitor details
  */
-export function extractGameIds(apiResponse: ExternalGameApiResponse): number[] {
-  return apiResponse.Games.map((game) => game.ID);
+export function extractGameInfo(
+  apiResponse: ExternalGameApiResponse
+): GameInfo[] {
+  return apiResponse.Games.map((game: ExternalGame) => {
+    const gameInfo: GameInfo = {
+      gameId: game.ID,
+      date: game.STime, // Game start time
+      statusText: game.IsFinished
+        ? "Finished"
+        : game.Active
+        ? "Live"
+        : "Upcoming",
+    };
+
+    // Extract competitor information (Comps array contains teams/competitors)
+    if (game.Comps && game.Comps.length >= 1) {
+      gameInfo.competitor1 = {
+        id: game.Comps[0].ID,
+        name: game.Comps[0].Name,
+        // Logo URL can be constructed from ImgVer if needed
+        // logo: `https://example.com/logos/${game.Comps[0].ID}.png` // Placeholder
+      };
+    }
+
+    if (game.Comps && game.Comps.length >= 2) {
+      gameInfo.competitor2 = {
+        id: game.Comps[1].ID,
+        name: game.Comps[1].Name,
+        // Logo URL can be constructed from ImgVer if needed
+        // logo: `https://example.com/logos/${game.Comps[1].ID}.png` // Placeholder
+      };
+    }
+
+    // Extract venue information if available
+    if (game.Venue) {
+      gameInfo.venue = {
+        id: game.Venue.ID,
+        name: game.Venue.Name,
+      };
+    }
+
+    return gameInfo;
+  });
 }

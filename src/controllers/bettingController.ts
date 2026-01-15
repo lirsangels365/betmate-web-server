@@ -4,7 +4,7 @@ import {
   N8nPayload,
   sendToAIAgent,
 } from "../services/n8nService.js";
-import { fetchGamesFromApi } from "../services/gamesApiService.js";
+import { fetchGamesFromApi, GameInfo } from "../services/gamesApiService.js";
 import {
   fetchBetLinesFromApi,
   BetLinesExternalApiResponse,
@@ -412,21 +412,34 @@ export async function getGameSuggestions(
       userId, // Use the userId from the path parameter
     };
 
-    // Fetch games from external 365scores API and extract game IDs
+    // Fetch games from external 365scores API and extract game information with competitors
     console.log("Fetching games from 365scores API...");
-    const allGameIds = await fetchGamesFromApi(
+    const allGamesInfo = await fetchGamesFromApi(
       userPreferences,
       MOCK_DATE_FILTERS
     );
 
     // Slice to get only the first 10 games (or less if there are fewer)
-    const gameIds = allGameIds.slice(0, 10);
+    const gamesInfo = allGamesInfo.slice(0, 10);
 
-    // Log the extracted game IDs
-    console.log("=== Extracted Game IDs ===");
-    console.log("Total Game IDs:", gameIds.length);
-    console.log("Game IDs:", gameIds);
-    console.log("=== End of Game IDs ===");
+    // Extract game IDs for bet lines API calls
+    const gameIds = gamesInfo.map((game) => game.gameId);
+
+    // Create a map of gameId -> GameInfo for quick lookup
+    const gameInfoMap = new Map<number, GameInfo>();
+    gamesInfo.forEach((gameInfo) => {
+      gameInfoMap.set(gameInfo.gameId, gameInfo);
+    });
+
+    // Log the extracted game information
+    console.log("=== Extracted Game Information ===");
+    console.log("Total Games:", gamesInfo.length);
+    gamesInfo.forEach((game) => {
+      console.log(
+        `Game ID: ${game.gameId}, Competitor1: ${game.competitor1?.name}, Competitor2: ${game.competitor2?.name}`
+      );
+    });
+    console.log("=== End of Game Information ===");
 
     // Fetch bet lines for each game using Promise.all
     // Using uc=21 as shown in the example API call
@@ -462,7 +475,12 @@ export async function getGameSuggestions(
         LINE_TYPES_DATA.LineTypes
       );
 
-    // Combine filtered bet lines results with filtered line types
+    // Filter gamesInfo to only include games that have bet lines
+    const filteredGamesInfo = gamesInfo.filter((gameInfo) =>
+      gameIds.includes(gameInfo.gameId)
+    );
+
+    // Combine filtered bet lines results with filtered line types and game info
     const bettingData: GamesBetsSuggestionsResponse = {
       betLines: filteredBetLines,
       lineTypes: filteredLineTypes,
@@ -471,6 +489,7 @@ export async function getGameSuggestions(
     console.log("Prepared betting data for AI agent:", {
       betLinesCount: bettingData.betLines.length,
       lineTypesCount: bettingData.lineTypes.length,
+      gamesInfoCount: filteredGamesInfo.length,
     });
 
     // Create prompt for AI agent
@@ -556,7 +575,10 @@ Your response MUST ALWAYS be a valid JSON array of Game objects. The output stru
 IMPORTANT:
 - The response MUST be a JSON array (starts with [ and ends with ])
 - Each element in the array must be a Game object matching the structure above
-- Extract game information (competitors, venue, date) from the input data.betLines
+- Extract game information (competitors, venue, date) from the input data.gamesInfo array - match gameId from data.betLines to data.gamesInfo to get competitor names, venue, and date
+- Use competitor names from data.gamesInfo[].competitor1.name and data.gamesInfo[].competitor2.name
+- Use venue from data.gamesInfo[].venue.name if available
+- Use date from data.gamesInfo[].date if available
 - Map bet types using the data.lineTypes to get betTypeName
 - Calculate averaged odds from the Options.Rate values across different BMIDs
 - The "ai_insight" field should contain your analysis or recommendation for each bet
@@ -572,6 +594,7 @@ The objective is to reduce noise and return a clean, averaged, ready-to-display 
       data: {
         betLines: bettingData.betLines,
         lineTypes: bettingData.lineTypes,
+        gamesInfo: filteredGamesInfo, // Include competitor names and game details
       },
     };
 
