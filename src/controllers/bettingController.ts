@@ -1,5 +1,9 @@
 import { Request, Response } from "express";
-import { sendToN8n, N8nPayload } from "../services/n8nService.js";
+import {
+  sendToN8n,
+  N8nPayload,
+  sendToAIAgent,
+} from "../services/n8nService.js";
 import { fetchGamesFromApi } from "../services/gamesApiService.js";
 import {
   fetchBetLinesFromApi,
@@ -459,15 +463,127 @@ export async function getGameSuggestions(
       );
 
     // Combine filtered bet lines results with filtered line types
-    const response: GamesBetsSuggestionsResponse = {
+    const bettingData: GamesBetsSuggestionsResponse = {
       betLines: filteredBetLines,
       lineTypes: filteredLineTypes,
     };
 
-    console.log("Response:", response);
+    console.log("Prepared betting data for AI agent:", {
+      betLinesCount: bettingData.betLines.length,
+      lineTypesCount: bettingData.lineTypes.length,
+    });
 
-    // Return 200 OK with bet lines and line types
-    res.status(200).json(response);
+    // Create prompt for AI agent
+    const aiPrompt = `You receive as input a list of games and markets in JSON format, including (but not limited to) the following fields:
+
+EntID – game identifier
+
+Type – bet type
+
+BMID – bookmaker identifier
+
+Options → Num, Rate – betting options and odds
+
+Goal:
+
+Build a recommendation list of N games (default: 5),
+and for each game select M unique bet types (default: 5).
+
+Total output should be N × M betting options.
+
+Rules:
+
+For each game (EntID), select up to M different bet types (Type).
+
+The same Type may appear across different games, but not more than once within the same game.
+
+For each bet:
+
+Calculate the Rate as the average of all Rate values for the same game, same bet type, and same Num across the 5 different BMIDs.
+
+Meaning: for the same EntID + Type + Num, average the Rate from all available BMIDs.
+
+Do not invent games or markets – only use what exists in the input.
+
+Do not recommend outcomes (no over/under decisions, no sides) – only surface available options.
+
+Each output item must include:
+
+EntID
+
+Type
+
+Num
+
+Rate (calculated average)
+
+CRITICAL OUTPUT REQUIREMENT:
+
+Your response MUST ALWAYS be a valid JSON array of Game objects. The output structure is STRICTLY defined as follows:
+
+[
+  {
+    "gameId": string,  // The EntID from the input data
+    "date": string,    // Extract from input or use a default format
+    "statusText": string,  // e.g., "Upcoming", "Live", "Finished"
+    "competitor1": {
+      "id": string,
+      "name": string,
+      "logo": string
+    },
+    "competitor2": {
+      "id": string,
+      "name": string,
+      "logo": string
+    },
+    "venue": string,
+    "bets": [
+      {
+        "betLineId": string,  // Unique identifier for the bet
+        "betTypeName": string,  // The name/title of the bet type (from lineTypes data)
+        "ai_insight": string,  // Your AI analysis or recommendation for this bet
+        "odds": {
+          "one": number,  // Rate for option Num=1 (averaged across BMIDs)
+          "X": number,    // Rate for option Num=2 if it's a draw/X option (optional)
+          "two": number   // Rate for option Num=2 or Num=3 (averaged across BMIDs)
+        },
+        "bookie_link": string  // Link or identifier for the bookmaker
+      }
+    ]
+  }
+]
+
+IMPORTANT:
+- The response MUST be a JSON array (starts with [ and ends with ])
+- Each element in the array must be a Game object matching the structure above
+- Extract game information (competitors, venue, date) from the input data.betLines
+- Map bet types using the data.lineTypes to get betTypeName
+- Calculate averaged odds from the Options.Rate values across different BMIDs
+- The "ai_insight" field should contain your analysis or recommendation for each bet
+- Return ONLY valid JSON - no additional text, explanations, or markdown formatting
+
+The objective is to reduce noise and return a clean, averaged, ready-to-display set of betting options in the exact JSON structure specified above.`;
+
+    // Send to AI agent via n8n webhook
+    // Note: n8n AI Agent expects 'chatInput' field for the prompt
+    console.log("Sending data to AI agent...");
+    const aiAgentPayload = {
+      chatInput: aiPrompt,
+      data: {
+        betLines: bettingData.betLines,
+        lineTypes: bettingData.lineTypes,
+      },
+    };
+
+    const aiResponse = await sendToAIAgent(aiAgentPayload);
+
+    console.log("AI agent response received");
+
+    // Return 200 OK with AI agent response
+    res.status(200).json({
+      success: true,
+      data: aiResponse,
+    });
   } catch (error) {
     // Error handling: Return 500 status with clean error message
     console.error("Error getting game suggestions:", error);
