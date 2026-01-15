@@ -5,6 +5,7 @@ import {
   fetchBetLinesFromApi,
   BetLinesExternalApiResponse,
   BetLine,
+  PopulatedBetLine,
 } from "../services/betLinesService.js";
 import { LINE_TYPES_DATA } from "../data/lineTypes.js";
 import { LineType } from "../services/lineTypeService.js";
@@ -303,6 +304,66 @@ interface GamesBetsSuggestionsQuery {
 }
 
 /**
+ * Allowed BMID values for filtering bet lines
+ */
+const ALLOWED_BMIDS = [161, 14, 53, 139, 174, 156];
+
+/**
+ * Allowed LineType ID values for filtering line types
+ */
+const ALLOWED_LINE_TYPE_IDS = [144, 145, 3, 14, 1, 12, 137];
+
+/**
+ * Type guard to check if a bet line is populated (not empty)
+ */
+function isPopulatedBetLine(line: BetLine): line is PopulatedBetLine {
+  return Object.keys(line).length > 0 && "BMID" in line;
+}
+
+/**
+ * Filters bet lines and line types according to the specified criteria
+ * A line is included only if BOTH conditions are met:
+ * 1. BMID is in the allowed BMIDs list
+ * 2. Type (lineType) is in the allowed LineType IDs list
+ * @param betLinesWithGameIds - Array of bet lines with game IDs
+ * @param lineTypes - Array of line types
+ * @returns Filtered bet lines and line types
+ */
+function filterBetLinesAndLineTypes(
+  betLinesWithGameIds: BetLinesWithGameId[],
+  lineTypes: LineType[]
+): {
+  betLines: BetLinesWithGameId[];
+  lineTypes: LineType[];
+} {
+  // Filter bet lines: only include populated lines that match BOTH conditions
+  // 1. BMID must be in ALLOWED_BMIDS
+  // 2. Type (lineType) must be in ALLOWED_LINE_TYPE_IDS
+  const filteredBetLines = betLinesWithGameIds.map((item) => ({
+    gameId: item.gameId,
+    Lines: item.Lines.filter((line) => {
+      if (!isPopulatedBetLine(line)) {
+        return false; // Exclude empty bet lines
+      }
+      // Check both conditions: BMID AND Type must be in allowed lists
+      const hasAllowedBMID = ALLOWED_BMIDS.includes(line.BMID);
+      const hasAllowedType = ALLOWED_LINE_TYPE_IDS.includes(line.Type);
+      return hasAllowedBMID && hasAllowedType;
+    }),
+  }));
+
+  // Filter line types: only include line types with allowed IDs
+  const filteredLineTypes = lineTypes.filter((lineType) =>
+    ALLOWED_LINE_TYPE_IDS.includes(lineType.ID)
+  );
+
+  return {
+    betLines: filteredBetLines,
+    lineTypes: filteredLineTypes,
+  };
+}
+
+/**
  * Controller to handle the GET /api/v1/games-bets-suggestions/:userId endpoint
  * Returns mock game suggestions with betting information
  * @param {Request} req - Express request object with path and query parameters
@@ -349,7 +410,13 @@ export async function getGameSuggestions(
 
     // Fetch games from external 365scores API and extract game IDs
     console.log("Fetching games from 365scores API...");
-    const gameIds = await fetchGamesFromApi(userPreferences, MOCK_DATE_FILTERS);
+    const allGameIds = await fetchGamesFromApi(
+      userPreferences,
+      MOCK_DATE_FILTERS
+    );
+
+    // Slice to get only the first 10 games (or less if there are fewer)
+    const gameIds = allGameIds.slice(0, 10);
 
     // Log the extracted game IDs
     console.log("=== Extracted Game IDs ===");
@@ -384,13 +451,20 @@ export async function getGameSuggestions(
       Lines: result.Lines,
     }));
 
-    // Combine bet lines results with line types
+    // Filter bet lines and line types according to specified criteria
+    const { betLines: filteredBetLines, lineTypes: filteredLineTypes } =
+      filterBetLinesAndLineTypes(
+        betLinesWithGameIds,
+        LINE_TYPES_DATA.LineTypes
+      );
+
+    // Combine filtered bet lines results with filtered line types
     const response: GamesBetsSuggestionsResponse = {
-      betLines: betLinesWithGameIds,
-      lineTypes: LINE_TYPES_DATA.LineTypes,
+      betLines: filteredBetLines,
+      lineTypes: filteredLineTypes,
     };
 
-    console.log("Response:", response.betLines);
+    console.log("Response:", response);
 
     // Return 200 OK with bet lines and line types
     res.status(200).json(response);
